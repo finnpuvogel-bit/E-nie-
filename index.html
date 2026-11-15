@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Yamaha E-Bike Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body { background: #0f1319; color: #94a3b8; font-family: 'Inter', sans-serif; touch-action: manipulation; -webkit-tap-highlight-color: transparent; overflow: hidden; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .card { background: #161b22; border: 1px solid #21262d; border-radius: 12px; }
+  .dial { background: radial-gradient(circle at center, #1e242d 0%, #0d1015 100%); border: 2px solid #30363d; border-radius: 50%; box-shadow: inset 0 0 12px rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+</style>
+</head>
+<body class="h-screen flex flex-col justify-between max-w-md mx-auto select-none p-2 bg-[#090b0e]">
+
+  <!-- TOP HEADER -->
+  <header class="card p-3 flex justify-between items-center">
+    <div>
+      <h1 class="text-white font-bold text-sm tracking-wide">YAMAHA LIVE DASHBOARD</h1>
+      <p id="connection-status" class="text-[10px] text-yellow-500 font-medium cursor-pointer">Nicht verbunden (Tippen zum Koppeln)</p>
+    </div>
+    <button id="btn-demo" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-white px-2.5 py-1 rounded font-semibold border border-slate-700">DEMO</button>
+  </header>
+
+  <!-- HAUPT-DASHBOARD -->
+  <main class="flex-1 flex flex-col justify-around py-1">
+    
+    <!-- TACHO & INFOS -->
+    <div class="grid grid-cols-2 gap-3 items-center px-1">
+      <!-- SPEED -->
+      <div class="dial w-36 h-36 mx-auto relative shadow-lg">
+        <span class="text-[8px] font-bold text-slate-400 tracking-wider">GESCHWINDIGKEIT</span>
+        <span id="val-speed" class="text-4xl font-black mono text-white my-1">0.0</span>
+        <span class="text-[9px] font-bold text-sky-400">KM/H</span>
+      </div>
+
+      <!-- DETAILS -->
+      <div class="flex flex-col gap-2">
+        <div class="card p-2.5 text-center">
+          <div class="text-[8px] font-bold text-slate-400">UNTERSTÜTZUNG</div>
+          <div id="val-mode" class="text-sm font-bold text-emerald-400 mt-0.5">ECO / STD</div>
+        </div>
+        <div class="card p-2.5 text-center">
+          <div class="text-[8px] font-bold text-slate-400">TRITTFREQUENZ</div>
+          <div id="val-cadence" class="text-base font-extrabold mono text-white mt-0.5">0 <span class="text-xs font-normal text-slate-500">RPM</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AKKU & DETAILS -->
+    <div class="grid grid-cols-3 gap-2 px-1">
+      <div class="card p-2 text-center">
+        <div class="text-[7px] font-bold text-slate-500">AKKU</div>
+        <div id="val-bat" class="text-sm font-bold mono text-emerald-400">0%</div>
+      </div>
+      <div class="card p-2 text-center">
+        <div class="text-[7px] font-bold text-slate-500">REICHWEITE</div>
+        <div id="val-range" class="text-sm font-bold mono text-white">0 km</div>
+      </div>
+      <div class="card p-2 text-center">
+        <div class="text-[7px] font-bold text-slate-500">MOTOR-TEMP</div>
+        <div id="val-temp" class="text-sm font-bold mono text-white">-- °C</div>
+      </div>
+    </div>
+
+    <!-- HINWEIS BOX -->
+    <div class="card p-3 bg-[#12161f] text-center">
+      <p class="text-[10px] text-slate-400">💡 Hinweis: Yamaha-Motoren erfordern für Leistungsänderungen physische Tuning-Module (z.B. SpeedBox), da die Werkssoftware per Bluetooth keine Entdrosselung zulässt.</p>
+    </div>
+
+  </main>
+
+  <!-- UNTERE LEISTE -->
+  <footer class="card py-2 px-3 flex justify-between items-center text-xs">
+    <span class="text-slate-400 mono">Yamaha BLE System</span>
+    <span id="val-odo" class="mono font-bold text-slate-300">ODO: 0.0 km</span>
+  </footer>
+
+<script>
+  let bluetoothDevice, gattServer;
+  let isConnected = false;
+  let demoInterval = null;
+
+  const connStatus = document.getElementById('connection-status');
+
+  function updateDisplay(d) {
+    document.getElementById('val-speed').textContent = d.speed.toFixed(1);
+    document.getElementById('val-bat').textContent = Math.round(d.battery) + '%';
+    document.getElementById('val-cadence').textContent = Math.round(d.cadence);
+    document.getElementById('val-range').textContent = Math.round(d.range) + ' km';
+    document.getElementById('val-temp').textContent = d.temp ? Math.round(d.temp) + '°C' : '-- °C';
+    document.getElementById('val-odo').textContent = 'ODO: ' + d.odo.toFixed(1) + ' km';
+  }
+
+  // Demo Modus zum Testen der Optik
+  document.getElementById('btn-demo').onclick = () => {
+    if (demoInterval) {
+      clearInterval(demoInterval);
+      demoInterval = null;
+      connStatus.textContent = "Nicht verbunden (Tippen zum Koppeln)";
+      connStatus.className = "text-[10px] text-yellow-500 font-medium";
+      updateDisplay({speed: 0, battery: 0, cadence: 0, range: 0, temp: 0, odo: 450.2});
+      return;
+    }
+    connStatus.textContent = "Demo Modus Aktiv";
+    connStatus.className = "text-[10px] text-emerald-400 font-bold";
+    let t = 0;
+    demoInterval = setInterval(() => {
+      t += 0.2;
+      let spd = Math.abs(Math.sin(t) * 24); // Regelt sich typischerweise um 25 ab
+      updateDisplay({
+        speed: spd,
+        battery: 92,
+        cadence: spd > 2 ? 75 + Math.sin(t*2)*10 : 0,
+        range: 68,
+        temp: 32,
+        odo: 450.2 + (t * 0.005)
+      });
+    }, 150);
+  };
+
+  // WebBluetooth Verbindung
+  connStatus.onclick = async () => {
+    if (!navigator.bluetooth) {
+      alert("WebBluetooth wird nicht unterstützt! Bitte in Bluefy (iOS) öffnen.");
+      return;
+    }
+
+    try {
+      connStatus.textContent = "Suche Yamaha E-Bike...";
+      
+      bluetoothDevice = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+      });
+
+      connStatus.textContent = "Verbinde mit Display...";
+      gattServer = await bluetoothDevice.gatt.connect();
+      
+      connStatus.textContent = "Verbunden!";
+      connStatus.className = "text-[10px] text-sky-400 font-bold";
+      isConnected = true;
+
+    } catch (err) {
+      console.error(err);
+      connStatus.textContent = "Verbindung fehlgeschlagen";
+      connStatus.className = "text-[10px] text-red-400 font-bold";
+    }
+  };
+</script>
+</body>
+</html>
